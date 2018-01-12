@@ -2,7 +2,13 @@ defmodule MerkleServerTest do
   use ExUnit.Case
   doctest MerkleServer
 
-  test "the truth" do
-    assert 1 + 1 == 2
+  setup do
+    {:ok, server_pid} = MerkleServer.start_link(['a', 'b', 'c', 'd'])
+    {:ok, server: server_pid}
   end
+
+  test "get blocks", %{server: pid} do
+    assert {:ok, ['a', 'b', 'c', 'd']} == MerkleServer.get_blocks(pid)
+  end
+  
 end
