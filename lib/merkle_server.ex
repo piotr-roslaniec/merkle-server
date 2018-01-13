@@ -21,31 +21,31 @@ defmodule MerkleServer do
     end
 
     def push(server_pid, {block, index, proof}) do
-        GenServer.cast(server_pid, {:push, {block, index, proof}})
+        GenServer.cast(server_pid, {:push, block, index, proof})
     end
 
 
     # Server (callbacks)
 
     @doc """
-    Initialize state with MerkleTree given `blocks`
+    Initialize state with `root_hash` and `blocks`
     """
-    def init(blocks) do
-        {:ok, MerkleTree.new(blocks)}
+    def init({root_hash, block_list}) do
+        {:ok, {root_hash, indexed_map(block_list)}}
     end
     
     @doc """
     Empty the received items and set a new `root_hash` for the Merkle tree, according to which the proofs should be verified.
     """
-    def handle_call({:reset, root_hash}, _from, state) do
-        {:reply, {root_hash}, state}
+    def handle_call({:reset, root_hash}, _from, _state) do
+        {:reply, {:ok, root_hash}, {root_hash, %{}}}
     end
 
     @doc """
     Get all the received blocks.
     """
-    def handle_call({:get_blocks}, _from, state) do
-        {:reply, {:ok, state.blocks()}, state}
+    def handle_call({:get_blocks}, _from, {root_hash, blocks}) do
+        {:reply, {:ok, Map.values(blocks)}, {root_hash, blocks}}
     end
 
     @doc """
@@ -61,8 +61,12 @@ defmodule MerkleServer do
     @doc """
     Append a new `block` at `index`, having first asserted the correctness of the `proof`.   
     """
-    def handle_cast({:push, block, index, proof}, state) do
-        {:noreply, {:push, block, index, proof}, state}
+    def handle_cast({:push, block, index, proof}, {root_hash, blocks}) do
+        if MerkleTree.Proof.proven?({block, index}, root_hash, proof) do
+            {:noreply, {root_hash, Map.put(blocks, index, block)}} 
+        else
+            {:noreply, {root_hash, blocks}}
+        end
     end
 
     @doc """
@@ -70,9 +74,17 @@ defmodule MerkleServer do
     """
     def handle_cast(request, state) do
         # Casts are asynch
-        # {:noreply, {actual_response}, state}
+        # {:noreply, state}
         # Or call the default implementation from GenServer
         super(request, state)
     end
-    
+
+    # Helper functions
+
+    @doc """
+    Creates map from list elements, with keys equal to indexes and values equal to list elements
+    """
+    def indexed_map(list) do
+        list |> Enum.with_index(1) |> Enum.map(fn {k,v}->{v,k} end) |> Map.new
+    end
 end
